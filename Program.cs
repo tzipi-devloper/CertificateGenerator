@@ -10,14 +10,16 @@ namespace CertificateGenerator
     {
         static void Main(string[] args)
         {
-            string folderPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "Work");
-            string csvPath = Path.Combine(folderPath, "Data.csv");
-            string templatePath = Path.Combine(folderPath, "Template.docx");
-            string outputFolder = Path.Combine(folderPath, "Output");
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+
+            string csvPath = Path.Combine(baseDir, "Data.csv");
+            string templatePath = Path.Combine(baseDir, "Template.docx");
+            string outputFolder = Path.Combine(baseDir, "Output");
 
             if (!File.Exists(csvPath) || !File.Exists(templatePath))
             {
-                Console.WriteLine("Error: Missing files in 'Work' folder.");
+                Console.WriteLine($"Error: Missing files in execution directory: {baseDir}");
+                Console.WriteLine("Make sure 'Copy to Output Directory' is set to 'Copy always' for Data.csv and Template.docx");
                 Console.ReadLine();
                 return;
             }
