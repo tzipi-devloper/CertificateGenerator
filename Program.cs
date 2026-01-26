@@ -18,7 +18,7 @@ namespace CertificateGenerator
             string outputFolder = Path.Combine(baseDir, "Output");
 
             logPath = Path.Combine(baseDir, "application.log");
-            File.WriteAllText(logPath, $"--- Process Started: {DateTime.Now} ---\n"); // איפוס לוג
+            File.WriteAllText(logPath, $"--- Process Started: {DateTime.Now} ---\n");
 
             Log("System initialized. Checking files...");
 
@@ -48,30 +48,47 @@ namespace CertificateGenerator
 
             try
             {
+                int successCount = 0;
+                int failCount = 0;
+
                 foreach (var emp in qualifiedEmployees)
                 {
-                    Log($"Generating PDF for: {emp.FullName}...");
-
-                    string bodyText = emp.FinalScore > 90
-                        ? $"הרינו להודיעך כי עברת בהצלחה את ההכשרה. הציון הסופי שלך הינו {emp.FinalScore:F1}.\n" +
-                          "נמצאת מתאימ/ה לתפקיד מוביל/ה טכנולוגי מחלקתית"
-                        : "הרינו להודיעך כי לא עברת את ההכשרה אך לצערנו לא נמצא תפקיד מתאים עבורך.";
-
-                    var replacements = new Dictionary<string, string>
+                    // === התיקון החשוב: הגנה מפני קריסה (Resilience) ===
+                    try
                     {
-                        { "FullName", emp.FullName },
-                        { "Department", emp.Department },
-                        { "Phone", "050-0000000" },
-                        { "Email", $"{emp.FirstName}@hogery.com" },
-                        { "BodyText", bodyText }
-                    };
+                        Log($"Processing: {emp.FullName} (Score: {emp.FinalScore:F1})...");
 
-                    GeneratePdf(wordApp, templatePath, Path.Combine(outputFolder, $"{emp.FirstName}_{emp.LastName}.pdf"), replacements);
+                        string bodyText = emp.FinalScore > 90
+                            ? $"הרינו להודיעך כי עברת בהצלחה את ההכשרה. הציון הסופי שלך הינו {emp.FinalScore:F1}.\n" +
+                              "נמצאת מתאימ/ה לתפקיד מוביל/ה טכנולוגי מחלקתית"
+                            : "הרינו להודיעך כי לא עברת את ההכשרה אך לצערנו לא נמצא תפקיד מתאים עבורך.";
+
+                        var replacements = new Dictionary<string, string>
+                        {
+                            { "FullName", emp.FullName },
+                            { "Department", emp.Department },
+                            { "Phone", "050-0000000" },
+                            { "Email", $"{emp.FirstName}@hogery.com" },
+                            { "BodyText", bodyText }
+                        };
+
+                        GeneratePdf(wordApp, templatePath, Path.Combine(outputFolder, $"{emp.FirstName}_{emp.LastName}.pdf"), replacements);
+                        Log($"SUCCESS: {emp.FullName}");
+                        successCount++;
+                    }
+                    catch (Exception innerEx)
+                    {
+                        // אם יש תקלה בעובד אחד - רושמים לוג וממשיכים לאחרים!
+                        Log($"ERROR processing {emp.FullName}: {innerEx.Message}");
+                        failCount++;
+                    }
                 }
+
+                Log($"Job Done. Success: {successCount}, Failed: {failCount}");
             }
             catch (Exception ex)
             {
-                Log($"CRITICAL ERROR: {ex.Message}");
+                Log($"FATAL ERROR: {ex.Message}");
             }
             finally
             {
@@ -80,7 +97,7 @@ namespace CertificateGenerator
                 Log("Word application closed.");
             }
 
-            Log("Process Complete. Check application.log for details.");
+            Console.WriteLine("Press Enter to exit.");
             Console.ReadLine();
         }
 
