@@ -8,37 +8,41 @@ namespace CertificateGenerator
 {
     class Program
     {
+        static string logPath;
+
         static void Main(string[] args)
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-
             string csvPath = Path.Combine(baseDir, "Data.csv");
             string templatePath = Path.Combine(baseDir, "Template.docx");
             string outputFolder = Path.Combine(baseDir, "Output");
 
+            logPath = Path.Combine(baseDir, "application.log");
+            File.WriteAllText(logPath, $"--- Process Started: {DateTime.Now} ---\n"); // איפוס לוג
+
+            Log("System initialized. Checking files...");
+
             if (!File.Exists(csvPath) || !File.Exists(templatePath))
             {
-                Console.WriteLine($"Error: Missing files in execution directory: {baseDir}");
-                Console.WriteLine("Make sure 'Copy to Output Directory' is set to 'Copy always' for Data.csv and Template.docx");
+                Log("ERROR: Missing Data.csv or Template.docx.");
                 Console.ReadLine();
                 return;
             }
             Directory.CreateDirectory(outputFolder);
 
-            Console.WriteLine("Loading and processing data using LINQ...");
+            Log("Loading data from CSV...");
 
-       
             var qualifiedEmployees = File.ReadAllLines(csvPath)
-                .Skip(1) 
-                .Select(line => line.Split(',')) 
+                .Skip(1)
+                .Select(line => line.Split(','))
                 .Where(cols => cols.Length >= 5 && !string.IsNullOrWhiteSpace(cols[0]))
-                .Select(cols => new Employee(cols)) 
+                .Select(cols => new Employee(cols))
                 .GroupBy(emp => emp.FullName)
                 .Select(g => g.First())
                 .Where(emp => emp.FinalScore >= 70)
                 .ToList();
 
-            Console.WriteLine($"Found {qualifiedEmployees.Count} qualified employees. Generating PDFs...");
+            Log($"Found {qualifiedEmployees.Count} qualified employees. Starting Word...");
 
             Word.Application wordApp = new Word.Application { Visible = false };
 
@@ -46,8 +50,7 @@ namespace CertificateGenerator
             {
                 foreach (var emp in qualifiedEmployees)
                 {
-                    Console.WriteLine($"Generating for: {emp.FullName} (Score: {emp.FinalScore:F1})");
-
+                    Log($"Generating PDF for: {emp.FullName}...");
 
                     string bodyText = emp.FinalScore > 90
                         ? $"הרינו להודיעך כי עברת בהצלחה את ההכשרה. הציון הסופי שלך הינו {emp.FinalScore:F1}.\n" +
@@ -55,53 +58,52 @@ namespace CertificateGenerator
                         : "הרינו להודיעך כי לא עברת את ההכשרה אך לצערנו לא נמצא תפקיד מתאים עבורך.";
 
                     var replacements = new Dictionary<string, string>
-            {
-                { "FullName", emp.FullName },
-                { "Department", emp.Department },
-                { "Phone", "050-0000000" },
-                { "Email", $"{emp.FirstName}@gmail.com" },
-                { "BodyText", bodyText }
-            };
+                    {
+                        { "FullName", emp.FullName },
+                        { "Department", emp.Department },
+                        { "Phone", "050-0000000" },
+                        { "Email", $"{emp.FirstName}@hogery.com" },
+                        { "BodyText", bodyText }
+                    };
 
                     GeneratePdf(wordApp, templatePath, Path.Combine(outputFolder, $"{emp.FirstName}_{emp.LastName}.pdf"), replacements);
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Critical Error: {ex.Message}");
+                Log($"CRITICAL ERROR: {ex.Message}");
             }
             finally
             {
                 wordApp.Quit();
                 System.Runtime.InteropServices.Marshal.ReleaseComObject(wordApp);
+                Log("Word application closed.");
             }
 
-            Console.WriteLine("Process Complete. Press Enter to exit.");
+            Log("Process Complete. Check application.log for details.");
             Console.ReadLine();
         }
 
-      
+        static void Log(string message)
+        {
+            string entry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} | {message}";
+            Console.WriteLine(entry);
+            try { File.AppendAllText(logPath, entry + Environment.NewLine); } catch { }
+        }
+
         static void GeneratePdf(Word.Application app, string template, string output, Dictionary<string, string> data)
         {
             Word.Document doc = app.Documents.Open(template, ReadOnly: true);
-
             foreach (Word.Field field in doc.Fields)
             {
                 if (field.Code.Text.Contains("MERGEFIELD"))
                 {
                     string fieldName = field.Code.Text.Split(new[] { "MERGEFIELD" }, StringSplitOptions.None)[1].Trim().Split(' ')[0].Trim('"');
-
-                    if (data.TryGetValue(fieldName, out string value))
-                    {
-                        field.Select();
-                        app.Selection.TypeText(value);
-                    }
+                    if (data.TryGetValue(fieldName, out string value)) { field.Select(); app.Selection.TypeText(value); }
                 }
             }
-
             doc.ExportAsFixedFormat(output, Word.WdExportFormat.wdExportFormatPDF);
             doc.Close(false);
-
         }
     }
 }
